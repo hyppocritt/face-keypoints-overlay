@@ -1,0 +1,10 @@
+torch>=2.1
+torchvision
+numpy
+pandas
+albumentations
+opencv-python
+scikit-learn
+tqdm
+pyyaml
+python-dotenv
