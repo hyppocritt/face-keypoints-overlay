@@ -2,6 +2,12 @@
 data
 latest.pth
 
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
