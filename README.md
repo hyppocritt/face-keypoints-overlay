@@ -32,6 +32,12 @@ python -m venv .venv
 
 python -m pip install -r requirements.txt
 
-## Training
+## Usage
+
+### Training
 
 python -m src
+
+### Inference 
+
+python -m src.inference --data_path path/to/images --weights_dir weights/
