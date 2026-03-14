@@ -1,0 +1,12 @@
+model:
+  filename: model_state_dict_v1.pth
+  # only change if trained on another input_size previously
+  input_size: 224
+
+detect:
+  batch_size: 16
+  use_amp: false
+  pin_memory: true
+
+data:
+  chunk_size: 256
