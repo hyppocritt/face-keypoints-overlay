@@ -5,8 +5,9 @@ import cv2
 from tqdm import tqdm
 import torch
 
-from src.model import FacePointsModel
-from src.utils import get_device, load_from_state_dict
+from src.models.base_model import FacePointsModel
+from src.utils.common import get_device
+from src.utils.io import load_from_state_dict
 
 
 
