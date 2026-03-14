@@ -11,8 +11,9 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from src.dataset import FacePointsTransformDataset
-from src.model import FacePointsModel
-from src.utils import get_device, set_seed, load_from_state_dict, load_config
+from src.models.base_model import FacePointsModel
+from src.utils.common import get_device, set_seed
+from src.utils.io import load_from_state_dict, load_config
 from src.paths import CONFIG_DIR, WEIGHTS_DIR
 
 

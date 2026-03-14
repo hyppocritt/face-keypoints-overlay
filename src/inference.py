@@ -7,8 +7,11 @@ import pandas as pd
 from tqdm import tqdm
 
 from src.detector import FacePointsDetector
-from src.utils import load_config, collect_image_paths, load_images, visualize, calculate_metric, save_json, chunk_list
-
+from src.utils.common import chunk_list
+from src.utils.image import collect_image_paths, load_images
+from src.utils.io import load_config, save_json
+from src.utils.metrics import calculate_metric
+from src.utils.visualisation import visualize
 
 def run_inference(
         data_path: str | Path,
@@ -137,7 +140,7 @@ def run_inference(
                     name=name,
                     show=vis_fig,
                     save=save_vis,
-                    save_dir=save_dir / 'img'
+                    save_dir=(save_dir / 'img') if save_vis else None
                     )
 
     if save:
