@@ -140,7 +140,7 @@ def run_inference(
                     name=name,
                     show=vis_fig,
                     save=save_vis,
-                    save_dir=save_dir / 'img'
+                    save_dir=(save_dir / 'img') if save_vis else None
                     )
 
     if save:
