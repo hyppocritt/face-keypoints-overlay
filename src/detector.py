@@ -142,11 +142,12 @@ class FacePointsDetector():
             batch.append(image)
 
         batch = np.array(batch)
-        batch = torch.from_numpy(batch).permute(0, 3, 1, 2).to(dtype=torch.float32, 
-                                                               memory_format=torch.channels_last)
+        batch = torch.from_numpy(batch).permute(0, 3, 1, 2)
 
         if pin_memory:
             batch = batch.pin_memory()
+
+        batch.to(dtype=torch.float32, memory_format=torch.channels_last)
 
         return batch, original_shapes, image_names_slice
 
@@ -189,6 +190,7 @@ class FacePointsDetector():
         device_type = 'cuda' if self.device.type == 'cuda' else \
                       'mps' if self.device.type == 'mps' else \
                       'cpu'
+        pin_memory = pin_memory and (device_type == 'cuda')
 
         for batch_num in tqdm(range(n_batches), desc=f'Inference'):
 
