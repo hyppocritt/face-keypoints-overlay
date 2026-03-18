@@ -36,8 +36,48 @@ python -m pip install -r requirements.txt
 
 ### Training
 
-python -m src
+Run training:
+
+```bash
+python -m src train --data path/to/data
+```
+
+With overrides:
+
+```bash
+python -m src train \
+    --data path/to/data \
+    training.lr=0.01 \
+    dataloader.batch_size=32
+```
 
 ### Inference 
 
-python -m src.inference --data_path path/to/images --weights_dir weights/
+Run inference:
+
+```bash
+python -m src inference --data path/to/data
+```
+
+With overrides:
+
+```bash
+python -m src inference \
+    --data path/to/data \
+    inference.vis=first \
+    detect.use_amp=true
+```
+
+### Configuration
+
+You can also use YAML configuration files:
+
+```bash
+python -m src training --config path/to/yaml/config
+```
+
+```bash
+python -m src inference --config path/to/yaml/config
+```
+
+**CLI overrides have priority over YAML configuration**

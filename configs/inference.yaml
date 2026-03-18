@@ -1,12 +1,27 @@
 model:
+  path: ./weights/model_state_dict_v1.pth
   filename: model_state_dict_v1.pth
   # only change if trained on another input_size previously
   input_size: 224
+
+data:
+  path: ./data/
+  metadata_path: ./data/gt.csv
+  chunk_size: 256
+
+detector:
+  device: cuda
+
+inference:
+  save: false
+  save_dir: ./output/
+  metric: null
+  gt_path: null
+  vis: null
+  save_vis: false
+
 
 detect:
   batch_size: 16
   use_amp: false
   pin_memory: true
-
-data:
-  chunk_size: 256

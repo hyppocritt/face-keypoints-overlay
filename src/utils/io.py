@@ -20,7 +20,7 @@ def load_from_state_dict(model, state_dict_path: Path | str, device: torch.devic
             print('Could not load model from checkpoint/state dict.')
             
 
-def load_config(path):
+def load_yaml(path):
 
     with open(path) as f:
         return yaml.safe_load(f)

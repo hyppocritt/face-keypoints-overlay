@@ -1,10 +1,8 @@
 import os
 import copy
-import numpy as np 
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
-from dotenv import load_dotenv
 from sklearn.model_selection import train_test_split
 import torch 
 from torch import nn 
@@ -13,15 +11,15 @@ from torch.utils.data import DataLoader
 from src.dataset import FacePointsTransformDataset
 from src.models.base_model import FacePointsModel
 from src.utils.common import get_device, set_seed
-from src.utils.io import load_from_state_dict, load_config
-from src.paths import CONFIG_DIR, WEIGHTS_DIR
+from src.utils.io import load_from_state_dict
+from src.utils.settings import Settings
 
 
 def train_model(
         model: nn.Module,
         train_loader: DataLoader,
-        val_loader: DataLoader,
-        device: torch.device = None,
+        val_loader: DataLoader | None = None,
+        device: str | torch.device = None,
         epochs: int = 20,
         lr: float = 1e-3,
         use_scheduler: bool = False,
@@ -29,11 +27,41 @@ def train_model(
         early_stopping_delta: float = 1e-6,
         normalize_targets: bool = False,
         use_amp: bool = False,
-        save_path: str = './weights/',
+        save_path: str | Path = './weights/',
         filename: str = 'latest',
         save_weights_only: bool = True,
         patience: int = 10,
 ):
+    
+    """
+    Runs full training pipeline with specified parameters.
+
+    Args:
+        model (nn.Module): PyTorch model object for face keypoint regression.
+        train_loader (DataLoader): PyTorch Dataloader for train split.
+        val_loader (DataLoader | None): PyTorch Dataloader for val split.
+                                        If None, validation is skipped.
+        device (str | torch.device): Device type or PyTorch Device to do calculations on.
+        epochs (int): Amount of training epochs. 
+                      Training may be stopped earlier if early stopping is triggered.
+        lr (float): Learning rate used by the optimizer.
+        use_scheduler (bool): Wether to use learning rate scheduler that decreases lr of plateau.
+                              Enables learning rate scheduling on validation plateau, which may improve convergence.
+        weight_decay (float): Weight decay for AdamW optimizer.
+        early_stopping_delta (float): Minimum improvement in validation loss required to reset early stopping.
+        normalize_targets (bool): Whether to normalize coordinates during preprocessing. 
+                                 Will make model predict normalized coordinates as well.
+        use_amp (bool): Whether to use automatic mixed precision during training.
+                        Enable for faster training and reduced memory usage.
+        save_path (str | Path): Base directory for saving model checkpoints.
+        filename (str): Filename for trained models' state dictionary.
+        save_weights_only (bool): Whether to save models' state dictionary only.
+                                  Otherwise the output will include epoch number and best validation loss.
+        patience (int): Number of consecutive epochs without sufficient validation loss improvement before early stopping.
+
+    Returns:
+        nn.Module: Trained model (best weights if validation is used).
+    """
     
     current_patience = patience
     save_path = Path(save_path) / (filename + '.pth')
@@ -41,6 +69,8 @@ def train_model(
 
     if device is None:
         device = get_device()
+    elif isinstance(device, str):
+        device = torch.device(device)
     
     model.to(device)
 
@@ -146,10 +176,24 @@ def train_model(
     return model
 
 def get_train_val_loaders(
-        metadata_path: str | Path,
         dataset_dir: str | Path,
-        config: dict
-        ):
+        metadata_path: str | Path,
+        dataset_params: dict,
+        dataloader_params: dict
+        ) -> tuple[DataLoader, DataLoader]:
+    
+    """
+    Prepares dataloaders for training.
+
+    Args:
+        dataset_dir (str | Path): Directory containing dataset.
+        metadata_path (str | Path): Path to metadata file with ground truth.
+        dataset_params (dict): Dictoinary with parameters used in dataset initialization.
+        dataloader_params (dict): Dictoinary with parameters used in dataloader initialization.
+
+    Returns:
+        tuple[Dataloader, Dataloader]: Train and validation PyTorch dataloaders.
+    """
 
     metadata = pd.read_csv(metadata_path)
     train_metadata, val_metadata = train_test_split(metadata, test_size=0.1, random_state=78)
@@ -159,58 +203,48 @@ def get_train_val_loaders(
     train_dataset = FacePointsTransformDataset(
         image_dir=dataset_dir,
         metadata_df=train_metadata,
-        **config['dataset']
+        **dataset_params
     )
 
     val_dataset = FacePointsTransformDataset(
         image_dir=dataset_dir,
         metadata_df=val_metadata,
         transforms=None,
-        **config['dataset']
+        **dataset_params
     )
 
-    train_aug_loader = DataLoader(train_dataset, shuffle=True, **config['dataloader'])
-    val_no_aug_loader = DataLoader(val_dataset, shuffle=False, **config['dataloader'])
+    train_aug_loader = DataLoader(train_dataset, shuffle=True, **dataloader_params)
+    val_no_aug_loader = DataLoader(val_dataset, shuffle=False, **dataloader_params)
 
     return train_aug_loader, val_no_aug_loader
 
-def main():
+def main(settings: Settings):
 
-    load_dotenv()
     set_seed()
 
-    model_checkpoint_path = os.getenv('MODEL_CHECKPOINT_PATH', None)
-    dataset_dir = os.getenv('IMAGE_DIR', None)
-    metadata_path = os.getenv('METADATA_PATH', None)
-    weights_dir = os.getenv('WEIGHTS_DIR', WEIGHTS_DIR)
-    weights_dir = Path(weights_dir).resolve()
+    model_checkpoint_path = settings.resolve_model_path()
+    dataset_dir = settings.data.path
+    metadata_path = settings.data.metadata_path
 
-    config = load_config(CONFIG_DIR / 'train.yaml')
-
-    model = FacePointsModel(**config['model'])
+    model = FacePointsModel(settings.model.input_size)
     if model_checkpoint_path is not None:
         load_from_state_dict(model, model_checkpoint_path)
         
     if dataset_dir is None or metadata_path is None:
-        print('No dataset provided, training cancelled.')
+        raise ValueError('No dataset provided, training cancelled.')
 
     else:
-
-        dataset_dir = Path(dataset_dir).resolve()
-        metadata_path = Path(metadata_path).resolve()
 
         train_loader, val_loader = get_train_val_loaders(
             dataset_dir=dataset_dir,
             metadata_path=metadata_path,
-            config=config
+            dataset_params=settings.dataset,
+            dataloader_params=settings.dataloader
         )
 
         model = train_model(
             model=model,
             train_loader=train_loader,
             val_loader=val_loader,
-            **config['training']
+            **settings.training
         )
-
-if __name__ == '__main__':
-    main()
