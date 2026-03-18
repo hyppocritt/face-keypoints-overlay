@@ -6,6 +6,7 @@ model:
 data:
   path: ./data/
   metadata_path: ./data/gt.csv
+  chunk_size: 256
 
 training:
   device: mps
@@ -29,3 +30,20 @@ dataset:
 dataloader:
   batch_size: 16
   pin_memory: false
+
+detector:
+  device: mps
+
+inference:
+  save: false
+  save_dir: ./output/
+  metric: null
+  gt_path: null
+  vis: null
+  save_vis: false
+
+
+detect:
+  batch_size: 16
+  use_amp: false
+  pin_memory: true
