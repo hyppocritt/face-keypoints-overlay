@@ -1,24 +1,25 @@
-import os 
-from dotenv import load_dotenv
 from pathlib import Path
-import argparse
 import numpy as np 
 import pandas as pd
 from tqdm import tqdm
+import torch
 
 from src.detector import FacePointsDetector
 from src.utils.common import chunk_list
 from src.utils.image import collect_image_paths, load_images
-from src.utils.io import load_config, save_json
+from src.utils.io import save_json
 from src.utils.metrics import calculate_metric
 from src.utils.visualisation import visualize
+from src.utils.settings import Settings
 
 def run_inference(
         data_path: str | Path,
         detector: FacePointsDetector = None,
         weights_dir: str | Path = None,
-        config: dict = None,
-        config_dir: str | Path = None,
+        model_args: dict = None,
+        model_path: str | Path = None,
+        detect_args: dict = None,
+        chunk_size: int = 256,
         save: bool = False,
         save_dir: str | Path = './output',
         gt_path: str | Path = None,
@@ -31,10 +32,11 @@ def run_inference(
     Inference script that runs whole image processing pipeline.
 
     Args:
-        data_path (str | Path): Path to directory that contains images inside or in its' subdirectories.
+        data_path (str | Path): Path to directory that contains images inside or in its subdirectories.
         detector (FacePointsDetector): Detector object to use. If None, one is created.
         weights_dir (str | Path): Path to a directory with model weights. Provide if no Detector were given.
-        config_dir (str | Path): Path to a directory with config files.
+        model_args (dict): Dictionary of arguments used in model initialization.
+        model_path (str | Path): Path to models state dictionary.
         save (bool): Whether to save results as JSON file.
         save_dir (str | Path): Where to save results. Default to "./output".
         gt_path (str | Path): Path to a file with ground truth coordinates in format [name, x1, y1, x2, y2, ...].
@@ -52,14 +54,6 @@ def run_inference(
     """
 
     data_path = Path(data_path).resolve()
-    
-    if config is None:
-        if config_dir is None:
-            config_dir = Path(os.getenv('CONFIG_DIR', './configs/')).resolve()
-        if not config_dir.exists():
-            raise FileNotFoundError('No valid model config directory provided.')
-        
-        config = load_config(config_dir / 'inference.yaml')
         
     if save or save_vis:
         save_dir = Path(save_dir).resolve()
@@ -87,26 +81,26 @@ def run_inference(
             raise ValueError(f'Unknown ground truth file extension: {gt_path.suffix}')
         
 
-    input_size = config['model']['input_size']
-    chunk_size = config['data']['chunk_size']
-
     if detector is None:
-        if weights_dir is None:
-            weights_dir = Path(os.getenv('WEIGHTS_DIR', './weights/')).resolve()
-        if not weights_dir.exists():
+        if model_path is None:
+            if (model_args is not None) and model_args:
+                model_path = Path(weights_dir).resolve() / model_args['filename']
+        if (not model_path) or (not model_path.exists()):
             raise FileNotFoundError('Can not find model weights to create detector. Provide detector or model weights path.')
         
-        model_path = weights_dir / config['model']['filename']
         detector = FacePointsDetector(
             model_path=model_path,
-            input_size=input_size
+            input_size=model_args['input_size']
         )
+
+    if detect_args is None:
+        detect_args = {}
 
     
     image_paths = collect_image_paths(data_path)
 
     if not image_paths:
-        raise RuntimeError('No images found')
+        raise RuntimeError('No images found.')
 
     results = {}
     
@@ -119,7 +113,7 @@ def run_inference(
         current_results = detector.detect(
                             images=images,
                             image_names=image_names, 
-                            **config['detect']
+                            **detect_args
                             )
         results.update(current_results)
             
@@ -169,35 +163,29 @@ def run_inference(
     return results
 
 
-
-
+def main(settings: Settings):
     
-def get_args():
+    data_path = settings.data.path
 
-    """
-    Parses arguments for inference from command line.
-
-    Returns:
-        dict: Dict of inference keyword arguments.
-    """
-
-    parser = argparse.ArgumentParser(description='Inference script')
-    parser.add_argument('--data_path', type=str, default=None, help='Path to images')
-    parser.add_argument('--weights_dir', type=str, default=None, help='Path to a directory with model weights')
-    parser.add_argument('--config_dir', type=str, default=None, help='Path to a directory with configs')
-    parser.add_argument('--save', action='store_true', default=True, help='Wether to save results')
-    parser.add_argument('--save_dir', type=str, default='./output/', help='Path to saving directory')
-    parser.add_argument('--gt_path', type=str, default=None, help='Path to file with ground truth coordinates')
-    parser.add_argument('--metric', type=str, default=None, help='Type of metric to calculate. Supports "mse", "rmse", None.')
-    parser.add_argument('--vis', type=str, choices=['first', 'all'], default=None, help='Wether to show show visualization')
-    parser.add_argument('--save_vis', action='store_true', default=False, help='Wether to save visualization')
-
-    return vars(parser.parse_args())
-
-
-def main():
+    try:
+        model_path = settings.resolve_model_path()
+    except ValueError as e:
+        raise RuntimeError('Can not find model weights. Please provide model weights\' path.') from e
     
-    load_dotenv()
-    args = get_args()
+    model_path = Path(model_path).resolve()
+    
+    device = getattr(settings.detector, 'device', None)
 
-    run_inference(**args)
+    detector = FacePointsDetector(
+        model_path=model_path,
+        input_size=settings.model.input_size,
+        device=device
+        )
+
+    run_inference(
+        data_path=data_path,
+        detector=detector,
+        chunk_size=settings.data.chunk_size,
+        detect_args=settings.detect,
+        **settings.inference
+        )
