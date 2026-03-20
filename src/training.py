@@ -13,6 +13,7 @@ from src.models.base_model import FacePointsModel
 from src.utils.common import get_device, set_seed
 from src.utils.io import load_from_state_dict
 from src.utils.settings import Settings
+from src.utils.metrics_torch import mae_torch, nme_torch
 
 
 def train_model(
@@ -25,13 +26,13 @@ def train_model(
         use_scheduler: bool = False,
         weight_decay: float = 1e-5,
         early_stopping_delta: float = 1e-6,
-        normalize_targets: bool = False,
         use_amp: bool = False,
-        save_path: str | Path = './weights/',
+        save_dir: str | Path = './weights/',
         filename: str = 'latest',
         save_weights_only: bool = True,
         patience: int = 10,
-):
+        return_metrics: bool = False
+    ) -> nn.Module | tuple[nn.Module, dict]:
     
     """
     Runs full training pipeline with specified parameters.
@@ -49,23 +50,24 @@ def train_model(
                               Enables learning rate scheduling on validation plateau, which may improve convergence.
         weight_decay (float): Weight decay for AdamW optimizer.
         early_stopping_delta (float): Minimum improvement in validation loss required to reset early stopping.
-        normalize_targets (bool): Whether to normalize coordinates during preprocessing. 
-                                 Will make model predict normalized coordinates as well.
         use_amp (bool): Whether to use automatic mixed precision during training.
                         Enable for faster training and reduced memory usage.
-        save_path (str | Path): Base directory for saving model checkpoints.
+        save_dir (str | Path): Base directory for saving model checkpoints.
         filename (str): Filename for trained models' state dictionary.
         save_weights_only (bool): Whether to save models' state dictionary only.
                                   Otherwise the output will include epoch number and best validation loss.
         patience (int): Number of consecutive epochs without sufficient validation loss improvement before early stopping.
-
+        return_metrics (bool): Whether to return metrics of the best model. 
+                               Changes output from nn.Module to tuple[nn.Module, dict].
     Returns:
-        nn.Module: Trained model (best weights if validation is used).
+        nn.Module | tuple[nn.Module, dict]: Trained model (best weights if validation is used) 
+                    or tuple with trained model and its metrics.
+
     """
     
     current_patience = patience
-    save_path = Path(save_path) / (filename + '.pth')
-    os.makedirs(save_path.parent, exist_ok=True)
+    save_dir = Path(save_dir) / (filename + '.pth')
+    os.makedirs(save_dir.parent, exist_ok=True)
 
     if device is None:
         device = get_device()
@@ -88,19 +90,22 @@ def train_model(
         )
 
     best_val_mse = float('inf')
+    best_state_dict = copy.deepcopy(model.state_dict())
+    metrics = {}
 
     for epoch in range(1, epochs + 1):
 
         model.train()
         train_loss_sum = 0
+
+        train_mae_sum = 0
+        train_nme_sum = 0
+
         train_n = 0
 
         for images, coords in tqdm(train_loader, desc=f'Epoch {epoch}'):
             images = images.to(device=device, dtype=torch.float32)
             coords = coords.to(device=device, dtype=torch.float32)
-
-            if normalize_targets:
-                coords /= float(images.size(-1))
 
             with torch.amp.autocast('cuda', enabled=use_amp):
                 preds = model(images)
@@ -115,13 +120,25 @@ def train_model(
             train_loss_sum += batch_size * loss.item()
             train_n += batch_size
 
+            with torch.no_grad():
+
+                train_mae_sum += batch_size * mae_torch(coords, preds).item()
+                train_nme_sum += batch_size * nme_torch(coords, preds).item()
+
         train_mse = train_loss_sum / max(1, train_n)
+
+        train_mae = train_mae_sum / max(1, train_n)
+        train_nme = train_nme_sum / max(1, train_n)
 
         if val_loader is not None:
 
             model.eval()
 
             val_loss_sum = 0
+
+            val_mae_sum = 0
+            val_nme_sum = 0
+
             val_n = 0
 
             with torch.no_grad(), torch.amp.autocast('cuda', enabled=use_amp):
@@ -130,9 +147,6 @@ def train_model(
                     images = images.to(device=device, dtype=torch.float32)
                     coords = coords.to(device=device, dtype=torch.float32)
 
-                    if normalize_targets:
-                        coords /= float(images.size(-1))
-
                     preds = model(images)
                     loss = criterion(preds, coords)
 
@@ -140,8 +154,21 @@ def train_model(
                     val_loss_sum += batch_size * loss.item()
                     val_n += batch_size
 
+                    val_mae_sum += batch_size * mae_torch(coords, preds).item()
+                    val_nme_sum += batch_size * nme_torch(coords, preds).item()
+
                 val_mse = val_loss_sum / max(1, val_n)
-                print(f'Epoch {epoch:02d}, train mse = {train_mse:.6f}   val mse = {val_mse:.6f}   val rmse = {val_mse ** 0.5:.4f}')
+
+                val_mae = val_mae_sum / max(1, val_n)
+                val_nme = val_nme_sum / max(1, val_n)
+
+                print(
+                    f'''Epoch {epoch:02d}.
+                    train MSE = {train_mse:.6f}   val MSE = {val_mse:.6f}
+                    train RMSE = {train_mse ** 0.5:.4f} val RMSE = {val_mse ** 0.5:.4f}
+                    train MAE = {train_mae:.6f} val MAE = {val_mae:.6f}
+                    train NME = {train_nme:.6f} val NME = {val_nme:.6f}
+                    ''')
 
                 if use_scheduler:
                     scheduler.step(val_mse)
@@ -152,34 +179,51 @@ def train_model(
                         print(f'No val MSE decrease, stopping training')
                         return model
                     
-                elif save_path is not None:
+                else:
                     
                     current_patience = patience
                     best_val_mse = val_mse
-                    best_state_dict = copy.deepcopy(model.state_dict())
+                    best_val_rmse = val_mse ** 0.5
+                    best_val_mae = val_mae
+                    best_val_nme = val_nme
 
-                    if save_weights_only:
-                        torch.save(model.state_dict(), save_path)
-                        print(f'Saved best model\'s state dict to {save_path}')
+                    metrics = {
+                        'mse': best_val_mse,
+                        'rmse': best_val_rmse,
+                        'mae': best_val_mae,
+                        'nme': best_val_nme
+                    }
 
-                    else:
-                        torch.save({'model_state_dict': model.state_dict(),
-                                    'optimizer_state_dict': optimizer.state_dict(),
-                                    'epoch': epoch,
-                                    'val_mse': val_mse}, save_path)
-                        print(f'Saved best model\'s checkpoint to {save_path}')
+                    if save_dir is not None:
+                        best_state_dict = copy.deepcopy(model.state_dict())
+
+                        if save_weights_only:
+                            torch.save(model.state_dict(), save_dir)
+                            print(f'Saved best model\'s state dict to {save_dir}')
+
+                        else:
+                            torch.save({'model_state_dict': model.state_dict(),
+                                        'optimizer_state_dict': optimizer.state_dict(),
+                                        'epoch': epoch,
+                                        'metrics': metrics}, save_dir)
+                            print(f'Saved best model\'s checkpoint to {save_dir}')
 
         else:
             print(f'Epoch {epoch:02d}, train mse = {train_mse:.6f}')
 
     model.load_state_dict(best_state_dict)
-    return model
+
+    if return_metrics:
+        return model, metrics
+    
+    else:
+        return model
 
 def get_train_val_loaders(
         dataset_dir: str | Path,
         metadata_path: str | Path,
-        dataset_params: dict,
-        dataloader_params: dict
+        dataset_params: dict = None,
+        dataloader_params: dict = None
         ) -> tuple[DataLoader, DataLoader]:
     
     """
@@ -200,6 +244,9 @@ def get_train_val_loaders(
     train_metadata.reset_index(drop=True, inplace=True)
     val_metadata.reset_index(drop=True, inplace=True)
 
+    if dataset_params is None:
+        dataset_params = {}
+
     train_dataset = FacePointsTransformDataset(
         image_dir=dataset_dir,
         metadata_df=train_metadata,
@@ -212,6 +259,9 @@ def get_train_val_loaders(
         transforms=None,
         **dataset_params
     )
+
+    if dataloader_params is None:
+        dataloader_params = {}
 
     train_aug_loader = DataLoader(train_dataset, shuffle=True, **dataloader_params)
     val_no_aug_loader = DataLoader(val_dataset, shuffle=False, **dataloader_params)
