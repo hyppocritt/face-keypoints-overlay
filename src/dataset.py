@@ -28,11 +28,20 @@ def flip_coordinates(coords: np.array) -> None:
 
 class FacePointsTransformDataset(Dataset):
 
+    """
+    Dataset class for face keypoint regression.
+
+    Supports:
+    - Albumentation transforms with keypoints
+    - Normalization of target coordinates
+    """
+
     def __init__(
             self, image_dir: str, 
             metadata_path: str = None,
             metadata_df: pd.DataFrame = None, 
             image_size: int = 224, 
+            normalize_targets: bool = False,
             transforms: A.Compose = facepoints_transforms,
             flip_prob: float = 0.5,
             return_meta: bool = False
@@ -59,6 +68,7 @@ class FacePointsTransformDataset(Dataset):
             self.metadata = pd.DataFrame({'filename': names})
 
         self.image_size = image_size
+        self.normalize_targets = normalize_targets
         self.transforms = transforms
         self.flip_prob = flip_prob
         self.return_meta = return_meta
@@ -113,6 +123,11 @@ class FacePointsTransformDataset(Dataset):
             coords[0::2] *= x_mult 
             coords[1::2] *= y_mult
 
+            if self.normalize_targets:
+
+                coords[0::2] /= self.image_size
+                coords[1::2] /= self.image_size
+
             coords_tensor = torch.from_numpy(np.array(coords, dtype=np.float32))
 
         image_array = cv2.resize(
@@ -131,4 +146,4 @@ class FacePointsTransformDataset(Dataset):
         elif self.has_coords:
             return image_tensor, coords_tensor
         else:
-            raise RuntimeError('Dataset without coords not supported here')
+            raise RuntimeError('Dataset without coordinates not supported here')

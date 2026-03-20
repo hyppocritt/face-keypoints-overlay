@@ -145,19 +145,25 @@ def run_inference(
         gt_df.columns = ['name'] + [f'{ax}{k}' for k in range(1, 29) for ax in ('x', 'y')]
         gt_df.set_index('name', inplace=True)
 
-        metrics = {}
+        metrics_dict = {}
         total = []
+        total_mean = {}
 
         for name, coords in results.items():
             
             m = calculate_metric(gt_df.loc[name], coords, metric=metric)
             total.append(m)
-            metrics[name] = m
+            metrics_dict[name] = m
 
-        total_mean = float(np.mean(total))
-        metrics[f'mean_{metric}'] = total_mean
+        metrics = [metric] if isinstance(metric, str) else metric
 
-        save_json(metrics, save_dir / 'metrics.json')
+        for mtrc in metrics:
+
+            total_metric = [m[mtrc] for m in total]
+            total_mean[mtrc] = float(np.mean(total_metric))
+        metrics_dict['mean'] = total_mean
+
+        save_json(metrics_dict, save_dir / 'metrics.json')
 
             
     return results
