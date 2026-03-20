@@ -91,6 +91,7 @@ def train_model(
 
     best_val_mse = float('inf')
     best_state_dict = copy.deepcopy(model.state_dict())
+    metrics = {}
 
     for epoch in range(1, epochs + 1):
 
@@ -186,6 +187,13 @@ def train_model(
                     best_val_mae = val_mae
                     best_val_nme = val_nme
 
+                    metrics = {
+                        'mse': best_val_mse,
+                        'rmse': best_val_rmse,
+                        'mae': best_val_mae,
+                        'nme': best_val_nme
+                    }
+
                     if save_dir is not None:
                         best_state_dict = copy.deepcopy(model.state_dict())
 
@@ -197,7 +205,7 @@ def train_model(
                             torch.save({'model_state_dict': model.state_dict(),
                                         'optimizer_state_dict': optimizer.state_dict(),
                                         'epoch': epoch,
-                                        'val_mse': val_mse}, save_dir)
+                                        'metrics': metrics}, save_dir)
                             print(f'Saved best model\'s checkpoint to {save_dir}')
 
         else:
@@ -206,14 +214,6 @@ def train_model(
     model.load_state_dict(best_state_dict)
 
     if return_metrics:
-
-        metrics = {
-            'mse': best_val_mse,
-            'rmse': best_val_rmse,
-            'mae': best_val_mae,
-            'nme': best_val_nme
-
-        }
         return model, metrics
     
     else:
