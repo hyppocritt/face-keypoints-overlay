@@ -222,8 +222,8 @@ def train_model(
 def get_train_val_loaders(
         dataset_dir: str | Path,
         metadata_path: str | Path,
-        dataset_params: dict,
-        dataloader_params: dict
+        dataset_params: dict = None,
+        dataloader_params: dict = None
         ) -> tuple[DataLoader, DataLoader]:
     
     """
@@ -244,6 +244,9 @@ def get_train_val_loaders(
     train_metadata.reset_index(drop=True, inplace=True)
     val_metadata.reset_index(drop=True, inplace=True)
 
+    if dataset_params is None:
+        dataset_params = {}
+
     train_dataset = FacePointsTransformDataset(
         image_dir=dataset_dir,
         metadata_df=train_metadata,
@@ -256,6 +259,9 @@ def get_train_val_loaders(
         transforms=None,
         **dataset_params
     )
+
+    if dataloader_params is None:
+        dataloader_params = {}
 
     train_aug_loader = DataLoader(train_dataset, shuffle=True, **dataloader_params)
     val_no_aug_loader = DataLoader(val_dataset, shuffle=False, **dataloader_params)
