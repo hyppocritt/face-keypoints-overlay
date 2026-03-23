@@ -6,6 +6,7 @@ from tqdm import tqdm
 import torch
 
 from src.models.base_model import FacePointsModel
+from src.models.resnet_like import FacePointsResNet
 from src.utils.common import get_device
 from src.utils.io import load_from_state_dict
 
@@ -25,19 +26,24 @@ class FacePointsDetector():
     def __init__(
             self,
             model_path: str | Path,
+            model_type: str = 'resnet',
             input_size: int = 224,
             device: str | torch.device | None = None,
+            normalized_targets: bool | None = None
                  ):
         
         """
         Initializes the detector, loads weights, and prepares the model for inference.
 
         Args:
-            model_path (str | Path): Path to the model's state dictionary (.pth file).
+            model_path (str | Path): Path to the models state dictionary (.pth file).
+            model_type (str): Model architecture type. Must suit passed models state dictionary.
             input_size (int): Target resolution to which input images will be resized
                 Do not change unless you have trained your custom model with another resolution.
             device (str | torch.device | None): Device to run inference on. 
                 If None, automatically selects the best available device.
+            normalized_targets (bool | None): Whether model predicts normalized coordinates that need rescaling.
+                                             If None, tries to automaticaly choose mode.
         """
         
         self.input_size = int(input_size)
@@ -54,7 +60,13 @@ class FacePointsDetector():
         if self.device.type == 'cuda':
             torch.backends.cudnn.benchmark = True
 
-        self.model = FacePointsModel(input_size=input_size)
+        if model_type == 'base':
+            self.model = FacePointsModel(input_size=input_size)
+        elif model_type == 'resnet':
+            self.model = FacePointsResNet(input_size=input_size)
+        else:
+            raise ValueError(f'Unknown model type: {model_type}. Use "base" or "resnet".')
+        
         load_from_state_dict(self.model, Path(model_path))
         self.model.to(self.device)
         self.model.eval()
@@ -69,7 +81,14 @@ class FacePointsDetector():
         dummy = torch.zeros(1, 3, self.input_size, self.input_size).to(device=self.device)
 
         with torch.inference_mode():
-            self.model(dummy)
+            dummy_pred = self.model(dummy)
+
+        if normalized_targets is None:
+            self.normalized_targets = True \
+                                     if (dummy_pred.max() < 1.5) and (dummy_pred.min() > -0.5) else \
+                                     False
+        else:
+            self.normalized_targets = normalized_targets
 
     
     def preprocess(self, image: np.ndarray | Image.Image):
@@ -97,7 +116,9 @@ class FacePointsDetector():
     def postprocess(
             self, 
             pred_tensor: torch.Tensor, 
-            original_shape: np.ndarray | list[int] | tuple[int, int]):
+            original_shape: np.ndarray | list[int] | tuple[int, int],
+            normalized_targets: bool
+            ):
 
         """
         Resizes predicted coordinates back to original image size.
@@ -105,6 +126,7 @@ class FacePointsDetector():
         Args:
             pred_tensor (torch.Tensor): Tensor with predicted coordinates (x_1, y_1, x_2, y_2, ...).
             original_shape(np.ndarray | list[int] | tuple[int, int]): Original size of the image.
+            normalized_targets: Whether model predicts normalized coordinates.
 
         Returns:
             list[float]: List of resized coordinates in pixels.
@@ -112,13 +134,14 @@ class FacePointsDetector():
 
         y, x = original_shape
 
-        pred_tensor[0::2] *= x / self.input_size
-        pred_tensor[1::2] *= y / self.input_size
+        pred_tensor[0::2] *= x if normalized_targets else x / self.input_size
+        pred_tensor[1::2] *= y if normalized_targets else y / self.input_size
 
         pred = pred_tensor.tolist()
 
         return pred
     
+
     def _make_batch(
             self, 
             images: list[np.ndarray | Image.Image], 
@@ -148,7 +171,7 @@ class FacePointsDetector():
         if pin_memory:
             batch = batch.pin_memory()
 
-        batch.to(dtype=torch.float32, memory_format=torch.channels_last)
+        batch = batch.to(dtype=torch.float32, memory_format=torch.channels_last)
 
         return batch, original_shapes, image_names_slice
 
@@ -213,7 +236,7 @@ class FacePointsDetector():
 
                     pred = pred_tensor.clone()
 
-                    pred = self.postprocess(pred, original_shape)
+                    pred = self.postprocess(pred, original_shape, self.normalized_targets)
                     
                     if name not in result_dict:
                         result_dict[name] = pred
