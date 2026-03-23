@@ -29,5 +29,6 @@ def load_yaml(path):
 def save_json(dct: dict, path: str | Path, indent: int = 2):
 
     path = Path(path).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(dct, f, indent=indent)

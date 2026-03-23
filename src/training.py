@@ -1,5 +1,6 @@
 import os
 import copy
+import numpy as np
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
@@ -10,11 +11,37 @@ from torch.utils.data import DataLoader
 
 from src.dataset import FacePointsTransformDataset
 from src.models.base_model import FacePointsModel
+from src.models.resnet_like import FacePointsResNet
 from src.utils.common import get_device, set_seed
 from src.utils.io import load_from_state_dict
 from src.utils.settings import Settings
-from src.utils.metrics_torch import mae_torch, nme_torch
+from src.utils.metrics_torch import mse_torch, mae_torch, nme_torch
 
+
+class WingLoss(nn.Module):
+
+    def __init__(self, w=10, epsilon=2):
+
+        super().__init__()
+
+        self.w = w
+        self.epsilon = epsilon
+        self.c = w - w * np.log(1 + w / epsilon)
+
+    def forward(self, y_gt, y_pred):
+
+        e = torch.abs(y_gt - y_pred)
+
+        small = e < self.w
+        big = ~small
+
+        loss = torch.zeros_like(e)
+
+        loss[small] = self.w * torch.log(1 + e[small] / self.epsilon)
+        loss[big] = e[big] - self.c
+
+        return loss.mean()
+    
 
 def train_model(
         model: nn.Module,
@@ -23,6 +50,7 @@ def train_model(
         device: str | torch.device = None,
         epochs: int = 20,
         lr: float = 1e-3,
+        loss: str = 'mse',
         use_scheduler: bool = False,
         weight_decay: float = 1e-5,
         early_stopping_delta: float = 1e-6,
@@ -76,7 +104,18 @@ def train_model(
     
     model.to(device)
 
-    criterion = nn.MSELoss()
+    if loss.lower() not in {'mse', 'smoothl1', 'wing'}:
+        raise ValueError(f'Unknown loss: {loss}. Use "mse", "smoothl1" or "wing".')
+    
+    if loss.lower() == 'mse':
+        criterion = nn.MSELoss()
+    elif loss.lower() == 'smoothl1':
+        criterion = nn.SmoothL1Loss()
+    elif loss.lower() == 'wing':
+        criterion = WingLoss()
+
+    loss_name = loss
+        
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     use_amp = use_amp and device.type == 'cuda'
@@ -89,7 +128,7 @@ def train_model(
             factor=0.5
         )
 
-    best_val_mse = float('inf')
+    best_val_loss = float('inf')
     best_state_dict = copy.deepcopy(model.state_dict())
     metrics = {}
 
@@ -98,6 +137,7 @@ def train_model(
         model.train()
         train_loss_sum = 0
 
+        train_mse_sum = 0
         train_mae_sum = 0
         train_nme_sum = 0
 
@@ -122,11 +162,13 @@ def train_model(
 
             with torch.no_grad():
 
+                train_mse_sum += batch_size * mse_torch(coords, preds).item()
                 train_mae_sum += batch_size * mae_torch(coords, preds).item()
                 train_nme_sum += batch_size * nme_torch(coords, preds).item()
 
-        train_mse = train_loss_sum / max(1, train_n)
+        train_loss = train_loss_sum / max(1, train_n)
 
+        train_mse = train_mse_sum / max(1, train_n)
         train_mae = train_mae_sum / max(1, train_n)
         train_nme = train_nme_sum / max(1, train_n)
 
@@ -136,6 +178,7 @@ def train_model(
 
             val_loss_sum = 0
 
+            val_mse_sum = 0
             val_mae_sum = 0
             val_nme_sum = 0
 
@@ -154,16 +197,19 @@ def train_model(
                     val_loss_sum += batch_size * loss.item()
                     val_n += batch_size
 
+                    val_mse_sum += batch_size * mse_torch(coords, preds).item()
                     val_mae_sum += batch_size * mae_torch(coords, preds).item()
                     val_nme_sum += batch_size * nme_torch(coords, preds).item()
 
-                val_mse = val_loss_sum / max(1, val_n)
+                val_loss = val_loss_sum / max(1, val_n)
 
+                val_mse = val_mse_sum / max(1, val_n)
                 val_mae = val_mae_sum / max(1, val_n)
                 val_nme = val_nme_sum / max(1, val_n)
 
                 print(
-                    f'''Epoch {epoch:02d}.
+                    f'''Epoch {epoch:02d}. Optimizing {loss_name.upper()}
+                    train loss = {train_loss:.6f}   val loss = {val_loss:.6f}
                     train MSE = {train_mse:.6f}   val MSE = {val_mse:.6f}
                     train RMSE = {train_mse ** 0.5:.4f} val RMSE = {val_mse ** 0.5:.4f}
                     train MAE = {train_mae:.6f} val MAE = {val_mae:.6f}
@@ -171,17 +217,25 @@ def train_model(
                     ''')
 
                 if use_scheduler:
-                    scheduler.step(val_mse)
+                    scheduler.step(val_loss)
 
-                if val_mse >= best_val_mse - early_stopping_delta:
+                if val_loss >= best_val_loss - early_stopping_delta:
                     current_patience -= 1
                     if current_patience == 0:
                         print(f'No val MSE decrease, stopping training')
-                        return model
+
+                        model.load_state_dict(best_state_dict)
+
+                        if return_metrics:
+                            return (model, metrics)
+                        else:
+                            return model
                     
                 else:
                     
                     current_patience = patience
+                    best_val_loss = val_loss
+
                     best_val_mse = val_mse
                     best_val_rmse = val_mse ** 0.5
                     best_val_mae = val_mae
@@ -209,15 +263,20 @@ def train_model(
                             print(f'Saved best model\'s checkpoint to {save_dir}')
 
         else:
-            print(f'Epoch {epoch:02d}, train mse = {train_mse:.6f}')
+            print(f'''Epoch {epoch:02d}. Optimizing {loss_name.upper()}
+                    train loss = {train_loss:.6f}
+                    train MSE = {train_mse:.6f}   train RMSE = {train_mse ** 0.5:.4f} 
+                    train MAE = {train_mae:.6f} train NME = {train_nme:.6f}
+                  ''')
 
     model.load_state_dict(best_state_dict)
 
     if return_metrics:
-        return model, metrics
+        return (model, metrics)
     
     else:
         return model
+    
 
 def get_train_val_loaders(
         dataset_dir: str | Path,
@@ -276,7 +335,12 @@ def main(settings: Settings):
     dataset_dir = settings.data.path
     metadata_path = settings.data.metadata_path
 
-    model = FacePointsModel(settings.model.input_size)
+    if settings.model.model_type.lower() == 'resnet':
+        model = FacePointsResNet(settings.model.input_size)
+    elif settings.model.model_type.lower() == 'base':
+        model = FacePointsModel(settings.model.input_size)
+    else: 
+        raise ValueError(f'Unknown model type: {settings.model.model_type}. Use "base" or "resnet".')
     if model_checkpoint_path is not None:
         load_from_state_dict(model, model_checkpoint_path)
         

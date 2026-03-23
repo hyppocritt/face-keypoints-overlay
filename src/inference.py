@@ -184,6 +184,7 @@ def main(settings: Settings):
 
     detector = FacePointsDetector(
         model_path=model_path,
+        model_type=settings.model.model_type,
         input_size=settings.model.input_size,
         device=device
         )

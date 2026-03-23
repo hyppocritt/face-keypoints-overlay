@@ -1,8 +1,9 @@
 model:
-  path: ./weights/model_state_dict_v1.pth
-  filename: model_state_dict_v1.pth
+  path: ./weights/facepoints_resnet_nme_0_0469.pth
+  filename: facepoints_resnet_nme_0_0469.pth
   # only change if trained on another input_size previously
   input_size: 224
+  model_type: resnet
 
 data:
   path: ./data/

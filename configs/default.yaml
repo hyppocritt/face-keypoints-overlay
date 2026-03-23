@@ -1,7 +1,8 @@
 model:
-  path: ./weights/model_state_dict_v1.pth
+  path: ./weights/facepoints_resnet_nme_0_0469.pth
   filename: model_state_dict_v1.pth
   input_size: 224
+  model_type: resnet
 
 data:
   path: ./data/
@@ -16,7 +17,6 @@ training:
   use_scheduler: true
   early_stopping_delta: 0.000001
   use_amp: true
-  normalize_targets: false
   filename: latest
   save_dir: ./weights/
   save_weights_only: false
@@ -25,6 +25,7 @@ training:
 dataset:
   image_size: 224
   flip_prob: 0.5
+  normalize_targets: true
   return_meta: false
 
 dataloader:
