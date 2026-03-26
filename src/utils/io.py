@@ -26,6 +26,18 @@ def load_yaml(path):
         return yaml.safe_load(f)
 
 
+def read_json(path: str | Path) -> dict:
+
+    path = Path(path).resolve()
+    if not path.exists():
+        raise RuntimeError(f'Path does not exist: {path}.')
+    
+    with open(path, 'r', encoding='utf-8') as f:
+        result = json.load(f)
+
+    return result
+
+
 def save_json(dct: dict, path: str | Path, indent: int = 2):
 
     path = Path(path).resolve()
