@@ -10,7 +10,7 @@ from src.utils.common import chunk_list
 from src.utils.image import collect_image_paths, load_images
 from src.utils.io import save_json
 from src.utils.metrics import calculate_metric
-from src.utils.visualisation import get_visualization_callback
+from src.utils.visualization import get_visualization_callback
 from src.utils.settings import Settings
     
 
