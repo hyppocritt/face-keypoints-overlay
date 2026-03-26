@@ -2,18 +2,22 @@ from pathlib import Path
 import numpy as np 
 import pandas as pd
 from tqdm import tqdm
-import torch
+from PIL import Image
+from typing import Callable
 
 from src.detector import FacePointsDetector
 from src.utils.common import chunk_list
 from src.utils.image import collect_image_paths, load_images
 from src.utils.io import save_json
 from src.utils.metrics import calculate_metric
-from src.utils.visualisation import visualize
+from src.utils.visualisation import get_visualization_callback
 from src.utils.settings import Settings
+    
 
 def run_inference(
-        data_path: str | Path,
+        data_path: str | Path | None = None,
+        images: list[np.ndarray | Image.Image] | None = None,
+        image_names: list[str]| None = None,
         detector: FacePointsDetector = None,
         weights_dir: str | Path = None,
         model_args: dict = None,
@@ -24,28 +28,33 @@ def run_inference(
         save_dir: str | Path = './output',
         gt_path: str | Path = None,
         metric: str | None = None,
-        vis: str = None,
-        save_vis: bool = False,
-):
+        on_chunk_end: Callable | list[Callable] = None,
+) -> dict[str, list[float]]:
     
     """
     Inference script that runs whole image processing pipeline.
 
     Args:
-        data_path (str | Path): Path to directory that contains images inside or in its subdirectories.
+        data_path (str | Path | None): Path to directory that contains images inside or in its subdirectories.
+        images (list[np.ndarray | Image.Image] | None): List of already loaded images. 
+                                                        Alternative source.
+        image_names (list[str | None): List of names for provided images. 
+                                       Will be ignored if data_path is provided.
         detector (FacePointsDetector): Detector object to use. If None, one is created.
         weights_dir (str | Path): Path to a directory with model weights. Provide if no Detector were given.
         model_args (dict): Dictionary of arguments used in model initialization.
         model_path (str | Path): Path to models state dictionary.
+        detect_args (dict): Dictionary of arguments used in detection.
+        chunk_size (int): Size of a chunk of images passed to detector at a time.
+                          If data_path is provided, will limit RAM usage.
         save (bool): Whether to save results as JSON file.
         save_dir (str | Path): Where to save results. Default to "./output".
         gt_path (str | Path): Path to a file with ground truth coordinates in format [name, x1, y1, x2, y2, ...].
         metric (str | None): Type of metric to calculate. Supports "mse" and "rmse". Default to None(no metric).
-        vis (str): Whether to show visualisation on screen. Supports "all" to show visualization for every processed image, "first" to show for first image only. Default to None(do not show).
-        save_vis (bool): Wether to save visualization in saving directory.
+        on_chunk_end (Callable): Callback used when images chunk is processed. 
 
     Returns:
-        dict[list]: Dictionary with image names as keys and predicted cordinates as values.
+        dict[str, list[float]]: Dictionary with image names as keys and predicted cordinates as values.
 
     Raises:
         FileNotFoundError: If invalid paths to model weights' directory, config directory or ground truth file are given.
@@ -53,14 +62,42 @@ def run_inference(
         ValueError: If unsupported ground truth file type is given.
     """
 
-    data_path = Path(data_path).resolve()
+
+    def process_chunk(
+        images_chunk: list[Image.Image | Path],
+        names_chunk: list[str],
+        results: dict[str, list[float]],
+        callbacks: list[Callable]
+        ):
+
+        if isinstance(images_chunk[0], Path):
+            images_chunk = load_images(images_chunk)
+
+        results_chunk = detector.detect(
+            images=images_chunk,
+            image_names=names_chunk, 
+            **detect_args
+            )
+        results.update(results_chunk)
+
+        for callback in callbacks:
+            callback(
+                images_chunk,
+                names_chunk,
+                results_chunk,
+            )
         
-    if save or save_vis:
+                
+
+    if data_path is None and images is None:
+        raise ValueError('Provide either path to data or images list.')
+    
+    if data_path is not None and images is not None:
+        raise ValueError('Only one source should be provided, but got both data_path and images list')
+
+    if save:
         save_dir = Path(save_dir).resolve()
         save_dir.mkdir(parents=True, exist_ok=True)
-
-    if vis not in {None, 'first', 'all'}:
-        raise ValueError('vis must be one of: None, "first", "all"')
 
     if metric is not None:
         if gt_path is None:
@@ -85,6 +122,8 @@ def run_inference(
         if model_path is None:
             if (model_args is not None) and model_args:
                 model_path = Path(weights_dir).resolve() / model_args['filename']
+
+        model_path = Path(model_path).resolve()
         if (not model_path) or (not model_path.exists()):
             raise FileNotFoundError('Can not find model weights to create detector. Provide detector or model weights path.')
         
@@ -96,46 +135,72 @@ def run_inference(
     if detect_args is None:
         detect_args = {}
 
-    
-    image_paths = collect_image_paths(data_path)
+    if on_chunk_end is None:
+        on_chunk_end = []
+    elif not isinstance(on_chunk_end, (list, tuple)):
+        on_chunk_end = [on_chunk_end]
+    else:
+        on_chunk_end = list(on_chunk_end)
 
-    if not image_paths:
-        raise RuntimeError('No images found.')
+    on_chunk_end = [cb for cb in on_chunk_end if cb is not None]
 
     results = {}
+
+    if data_path is not None:
+
+        data_path = Path(data_path).resolve()
     
-    for chunk in tqdm(chunk_list(image_paths, size=chunk_size), 
-                      total=(len(image_paths) + 1) // chunk_size):
+        image_paths = collect_image_paths(data_path)
 
-        images = load_images(chunk)
-        image_names = [p.stem for p in chunk]
+        if not image_paths:
+            raise RuntimeError(f'No images found at {data_path}.')
 
-        current_results = detector.detect(
-                            images=images,
-                            image_names=image_names, 
-                            **detect_args
-                            )
-        results.update(current_results)
-            
+        chunks = tqdm(
+            zip(
+                chunk_list(image_paths, size=chunk_size), 
+                chunk_list([p.stem for p in image_paths], size=chunk_size)
+                ),
+            total=(len(image_paths) + 1) // chunk_size
+            )
+        
+        for images_chunk, names_chunk in chunks:
 
-        if vis or save_vis:
+            process_chunk(
+                images_chunk=images_chunk,
+                names_chunk=names_chunk,
+                results=results,
+                callbacks=on_chunk_end
+            )
+                    
+    elif images is not None:
 
-            for i, name in enumerate(image_names):
+        if not images:
+            raise RuntimeError(f'No images found in image list.')
+        
+        if image_names is None:
+            image_names = [f'img_{i}' for i in range(len(images))]
 
-                image = images[i]
-                coords = current_results[name]
+        if len(image_names) != len(images):
+            raise ValueError(f'Got {len(images)} images, but only {len(image_names)} names. \
+                               Provide valid names list or use None for automatic naming.')
+        
+        chunks = tqdm(
+            zip(
+                chunk_list(images, size=chunk_size), 
+                chunk_list(image_names, size=chunk_size)
+                ),
+            total=(len(images) + 1) // chunk_size
+            )
 
-                vis_fig = (i == 0 and vis == 'first') \
-                        or (vis == 'all')
+        for images_chunk, names_chunk in chunks:
 
-                visualize(
-                    image=image,
-                    coords=coords,
-                    name=name,
-                    show=vis_fig,
-                    save=save_vis,
-                    save_dir=(save_dir / 'img') if save_vis else None
-                    )
+            process_chunk(
+                images_chunk=images_chunk,
+                names_chunk=names_chunk,
+                results=results,
+                callbacks=on_chunk_end
+            )
+
 
     if save:
         save_json(results, save_dir / 'results.json')
@@ -188,11 +253,18 @@ def main(settings: Settings):
         input_size=settings.model.input_size,
         device=device
         )
+    
+    visualization_callback = get_visualization_callback(
+        vis=settings.visualization.vis,
+        save_vis=settings.visualization.save_vis,
+        save_dir=settings.visualization.save_dir
+    )
 
     run_inference(
         data_path=data_path,
         detector=detector,
         chunk_size=settings.data.chunk_size,
         detect_args=settings.detect,
+        on_chunk_end=visualization_callback,
         **settings.inference
         )
