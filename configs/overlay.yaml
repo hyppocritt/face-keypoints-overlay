@@ -1,7 +1,6 @@
 model:
   path: ./weights/facepoints_resnet_nme_0_0469.pth
-  filename: facepoints_resnet_nme_0_0469.pth
-  # only change if trained on another input_size previously
+  filename: model_state_dict_v1.pth
   input_size: 224
   model_type: resnet
 
@@ -25,6 +24,14 @@ inference:
   gt_path: null
 
 visualization:
+  save: false
+  save_dir: ./output/
+  vis: null
+  save_vis: false
+
+overlay:
+  mask: galsses_and_mustache
+  save: false
   save_dir: ./output/
   vis: null
   save_vis: false

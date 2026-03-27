@@ -1,5 +1,6 @@
 # Specific
 data
+!tests/data
 latest.pth
 
 # macOS

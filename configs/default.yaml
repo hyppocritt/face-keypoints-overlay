@@ -35,16 +35,25 @@ dataloader:
 detector:
   device: mps
 
+detect:
+  batch_size: 16
+  use_amp: false
+  pin_memory: true
+
 inference:
   save: false
   save_dir: ./output/
   metric: null
   gt_path: null
+
+visualization:
+  save_dir: ./output/
   vis: null
   save_vis: false
 
-
-detect:
-  batch_size: 16
-  use_amp: false
-  pin_memory: true
+overlay:
+  mask: glasses_and_mustache
+  save: false
+  save_dir: ./output/
+  vis: null
+  save_vis: false

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.training import main as train_main
 from src.inference import main as inference_main
+from src.overlay import main as overlay_main
 from src.utils.settings import Settings
 
 
@@ -19,7 +20,7 @@ def get_parser(main: bool = False) -> ArgumentParser:
         ArgumentParser: Parser for supported arguments and overrides.
     """
 
-    mode_list = ['train', 'inference']
+    mode_list = ['train', 'inference', 'overlay']
 
     parser = ArgumentParser()
 
@@ -34,6 +35,8 @@ def get_parser(main: bool = False) -> ArgumentParser:
                         help='Path to model state dictionary.')
     parser.add_argument('--metadata', type=str, default=None, 
                         help='Path to metadata file with ground truth coordinates.')
+    parser.add_argument('--mask', type=str, default=None,
+                        help='Type of mask for overlay.')
     
     return parser
 
@@ -65,7 +68,8 @@ def cli_to_settings(cli_args: Namespace = None, cli_overrides: list[str] = None)
         'command': 'mode',
         'data': 'data.path',
         'metadata': 'data.metadata_path',
-        'model': 'model.path'
+        'model': 'model.path',
+        'mask': 'overlay.mask',
     }
 
     for arg_name, key in mapping.items():
@@ -102,6 +106,9 @@ def main():
 
     elif command == 'inference':
         inference_main(settings=settings)
+
+    elif command == 'overlay':
+        overlay_main(settings=settings)
 
 
 if __name__ == '__main__':
