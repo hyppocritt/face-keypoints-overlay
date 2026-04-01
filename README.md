@@ -4,7 +4,7 @@ Deep learning pipeline for facial keypoint regression with a modular system for 
 
 ## Demo
 
-![demo](docs/demo.jpg)
+![demo](docs/preview.jpg)
 
 ---
 
