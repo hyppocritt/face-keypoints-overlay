@@ -20,8 +20,9 @@ class OverlayService:
     ):
 
         self.detector = FacePointsDetector(
-            model_path=model_path, model_type=model_type, batch_size=batch_size
+            model_path=model_path, model_type=model_type
         )
+        self.detect_args = {'batch_size': batch_size}
         self.save_keypoints = save_keypoints
         self.save_overlays = save_overlays
         self.chunk_size = chunk_size
@@ -31,6 +32,7 @@ class OverlayService:
             images=[image],
             image_names=["input"],
             detector=self.detector,
+            detect_args=self.detect_args,
             save=self.save_keypoints,
             chunk_size=self.chunk_size,
         )
@@ -51,9 +53,9 @@ def create_overlay_service(settings: Settings) -> OverlayService:
 
     return OverlayService(
         model_path=settings.resolve_model_path(),
-        model_type=settings.model.type,
+        model_type=settings.model.model_type,
         batch_size=settings.detect.batch_size,
-        chunk_size=settings.inference.chunk_size,
+        chunk_size=settings.data.chunk_size,
         save_keypoints=settings.inference.save,
         save_overlays=settings.overlay.save,
     )
