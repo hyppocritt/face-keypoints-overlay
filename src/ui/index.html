@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Face Keypoints Overlay</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: white;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    input, select, button {
+      margin: 10px;
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+    }
+
+    button {
+      background: #3b82f6;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #2563eb;
+    }
+
+    img {
+      margin-top: 20px;
+      max-width: 100%;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Face Keypoints Overlay</h2>
+
+  <input type="file" id="fileInput" accept="image/*">
+  <br>
+
+  <select id="maskSelect">
+    <option value="glasses_and_mustache">Glasses and mustache</option>
+  </select>
+
+  <br>
+
+  <button onclick="upload()">Apply Overlay</button>
+
+  <div>
+    <img id="result" />
+  </div>
+</div>
+
+<script>
+async function upload() {
+  const file = document.getElementById("fileInput").files[0];
+  const mask = document.getElementById("maskSelect").value;
+
+  if (!file) {
+    alert("Please select an image");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mask", mask);
+
+  const response = await fetch("/overlay", {
+    method: "POST",
+    body: formData
+  });
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+
+  document.getElementById("result").src = url;
+}
+</script>
+
+</body>
+</html>

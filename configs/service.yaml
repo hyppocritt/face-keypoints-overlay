@@ -1,0 +1,35 @@
+model:
+  path: ./weights/facepoints_resnet_nme_0_0469.pth
+  filename: model_state_dict_v1.pth
+  input_size: 224
+  model_type: resnet
+
+data:
+  path: ./data/
+  metadata_path: ./data/gt.csv
+  chunk_size: 256
+
+detector:
+  device: cuda
+
+detect:
+  batch_size: 16
+  use_amp: false
+  pin_memory: true
+
+inference:
+  save: false
+  save_dir: ./output/
+  metric: null
+  gt_path: null
+
+visualization:
+  save_dir: ./output/
+  vis: null
+  save_vis: false
+
+overlay:
+  save: false
+  save_dir: ./output/
+  vis: null
+  save_vis: false

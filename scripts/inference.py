@@ -1,5 +1,6 @@
-from src.inference import main as inference_main
 from src.cli import cli_to_settings
+from src.inference import main as inference_main
+
 
 def main():
 

@@ -2,7 +2,13 @@
 
 Deep learning pipeline for facial keypoint regression with a modular system for overlaying graphics on detected faces.
 
+---
+
 ## Demo
+
+![ui-demo](docs/ui_demo.gif)
+
+Original pipeline visualization:
 
 ![demo](docs/demo.png)
 
@@ -16,7 +22,10 @@ Deep learning pipeline for facial keypoint regression with a modular system for 
 - Callback-based inference pipeline
 - Keypoint-driven overlay system for applying graphical masks
 - Albumentations-based augmentation pipeline
-- Clean CLI interface for all stages (train / inference / overlay)
+- Clean CLI interface (train / inference / overlay)
+- FastAPI-based backend service
+- Simple browser UI
+- Docker & docker-compose support
 
 ---
 
@@ -25,104 +34,148 @@ Deep learning pipeline for facial keypoint regression with a modular system for 
 The project is organized into three independent pipelines:
 
 ### Training
+
 - Dataset loading and augmentation
 - Model training with AMP
 - Metric computation (MSE, MAE, NME)
 - Early stopping and best model selection
 
 ### Inference
+
 - Image preprocessing
 - Keypoint prediction
 - Optional visualization
 
 ### Overlay
+
 - Keypoint-based transformations
 - Mask application
 - Result visualization
 
 ### Data flow
 
-image → preprocessing → model → keypoints → overlay
+image -> preprocessing -> model -> keypoints -> overlay
 
 ---
 
 ## Installation
 
-### macOS / Linux
+### Option 1 — Poetry (recommended for development)
 
 ```bash
 git clone git@github.com:hyppocritt/face-keypoints-overlay.git
 cd face-keypoints-overlay
 
-python3 -m venv .venv
-source .venv/bin/activate
-
-python3 -m pip install -r requirements.txt
+poetry install
 ```
 
-### Windows (Powerhell)
+Activate environment:
+
+```bash
+poetry env activate
+```
+
+Run commands with:
+
+```bash
+poetry run <command>
+```
+
+---
+
+### Option 2 — Docker
 
 ```bash
 git clone git@github.com:hyppocritt/face-keypoints-overlay.git
 cd face-keypoints-overlay
+```
 
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+Build and run:
 
-python -m pip install -r requirements.txt
+```bash
+docker compose up --build
+```
 
+After startup open:
+
+```
+http://localhost:8000
 ```
 
 ---
 
 ## Usage
 
-### Training
+### Web UI (recommended)
 
-Run training:
+Run with Docker:
 
 ```bash
-python -m src train --data path/to/data
+docker compose up -d
+```
+
+Or locally:
+
+```bash
+poetry run uvicorn src.api:app --reload
+```
+
+Open in browser:
+
+```
+http://127.0.0.1:8000
+```
+
+Upload an image, choose a mask, and get the result.
+
+---
+
+### CLI
+
+#### Training
+
+```bash
+poetry run python -m src train --data path/to/data
 ```
 
 With overrides:
 
 ```bash
-python -m src train \
+poetry run python -m src train \
     --data path/to/data \
     training.lr=0.01 \
     dataloader.batch_size=32
 ```
 
-### Inference
+---
 
-Run inference:
+#### Inference
 
 ```bash
-python -m src inference --data path/to/data
+poetry run python -m src inference --data path/to/data
 ```
 
 With overrides:
 
 ```bash
-python -m src inference \
+poetry run python -m src inference \
     --data path/to/data \
     inference.vis=first \
     detect.use_amp=true
 ```
 
-### Overlay
+---
 
-Run overlay pipeline:
+#### Overlay
 
 ```bash
-python -m src overlay --data path/to/data
+poetry run python -m src overlay --data path/to/data
 ```
 
 With overrides:
 
 ```bash
-python -m src overlay \
+poetry run python -m src overlay \
     --data path/to/data \
     overlay.mask=default \
     overlay.save=true
@@ -130,24 +183,42 @@ python -m src overlay \
 
 ---
 
+## API
+
+### POST /overlay
+
+- Accepts image file
+- Returns processed image
+
+Example (curl):
+
+```
+curl -X POST http://127.0.0.1:8000/overlay \
+    -F "file=@image.jpg" \
+    -F "mask=default" \
+    --output result.png
+```
+
+---
+
 ## Configuration
 
 The project uses a unified configuration system:
+
 - CLI arguments
 - YAML config files
 - Environment variables
 - Default values
 
 Priority:
+
 CLI > YAML > ENV > defaults
 
 Example:
 
 ```bash
-python -m src train --config path/to/config.yaml
+poetry run python -m src train --config configs/train.yaml
 ```
-
-CLI overrides always have higher priority than YAML configuration.
 
 ---
 
@@ -158,15 +229,22 @@ src/
   training.py
   inference.py
   overlay.py
+  api.py
   cli.py
+  detector.py
   dataset.py
+  mask.py
+  paths.py
+  services/
   models/
   utils/
+  ui/
 ```
 
 ---
 
 ## Metrics
+
 - MSE (Mean Squared Error)
 - MAE (Mean Absolute Error)
 - NME (Normalized Mean Error)
@@ -174,7 +252,17 @@ src/
 ---
 
 ## Future Improvements
+
 - Face detection integration for real-world images
 - Pretrained backbones (ResNet / MobileNet)
 - Experiment tracking (TensorBoard / Weights & Biases)
-- Video inference support
+- Batch API support
+- Authentication for API
+
+---
+
+## Notes
+
+- Torch is not included in Poetry dependencies for Docker optimization
+- Install it manually for local training if needed
+- UI is served via FastAPI and can be proxied with nginx

@@ -10,7 +10,7 @@ def mse(y_gt, y_pred):
 
 
 def rmse(y_gt, y_pred):
-    
+
     y_gt = np.asarray(y_gt)
     y_pred = np.asarray(y_pred)
 
@@ -42,19 +42,17 @@ def nme(y_gt, y_pred, l=4, r=9):
 
     eps = 1e-8
     d = np.linalg.norm(right - left, axis=1) + eps
-    
+
     error = np.linalg.norm(y_gt - y_pred, axis=2).mean(axis=1)
 
     return np.mean(error / d)
 
 
-
 def calculate_metric(
-        keypoints_gt: list | np.ndarray, 
-        keypoints_pred: list | np.ndarray, 
-        metric: str | list[str] = 'mse'
-        ) -> dict:
-    
+    keypoints_gt: list | np.ndarray,
+    keypoints_pred: list | np.ndarray,
+    metric: str | list[str] = "mse",
+) -> dict:
     """
     Calculates a metric between ground truth and predicted keypoint coordinates.
 
@@ -69,7 +67,7 @@ def calculate_metric(
     Raises:
         ValueError: If an unsupported metric is specified.
     """
-    
+
     keypoints_gt = np.asarray(keypoints_gt)
     keypoints_pred = np.asarray(keypoints_pred)
 
@@ -78,25 +76,21 @@ def calculate_metric(
     metrics = [metric] if isinstance(metric, str) else metric
     metrics = set(map(lambda x: x.lower(), metrics))
 
-    supported_metrics = {'mse', 'rmse', 'mae', 'nme'}
+    supported_metrics = {"mse", "rmse", "mae", "nme"}
 
     if len(metrics - supported_metrics) > 0:
-        raise ValueError(f'Unknown metrics: {metrics - supported_metrics}')
+        raise ValueError(f"Unknown metrics: {metrics - supported_metrics}")
 
-    if 'mse' in metrics:
-        
-        result['mse'] = mse(keypoints_gt, keypoints_pred)
-    
-    if 'rmse' in metrics:
+    if "mse" in metrics:
+        result["mse"] = mse(keypoints_gt, keypoints_pred)
 
-        result['rmse'] = rmse(keypoints_gt, keypoints_pred)
-    
-    if 'mae' in metrics:
+    if "rmse" in metrics:
+        result["rmse"] = rmse(keypoints_gt, keypoints_pred)
 
-        result['mae'] = mae(keypoints_gt, keypoints_pred)
+    if "mae" in metrics:
+        result["mae"] = mae(keypoints_gt, keypoints_pred)
 
-    if 'nme' in metrics:
-
-        result['nme'] = nme(keypoints_gt, keypoints_pred)
+    if "nme" in metrics:
+        result["nme"] = nme(keypoints_gt, keypoints_pred)
 
     return result

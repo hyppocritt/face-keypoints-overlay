@@ -1,9 +1,10 @@
 from pathlib import Path
-import numpy as np 
-from PIL import Image
+
 import cv2
-from tqdm import tqdm
+import numpy as np
 import torch
+from PIL import Image
+from tqdm import tqdm
 
 from src.models.base_model import FacePointsModel
 from src.models.resnet_like import FacePointsResNet
@@ -11,9 +12,7 @@ from src.utils.common import get_device
 from src.utils.io import load_from_state_dict
 
 
-
-class FacePointsDetector():
-
+class FacePointsDetector:
     """
     Class for face landmarks detection and coordinate regression.
 
@@ -24,14 +23,13 @@ class FacePointsDetector():
     """
 
     def __init__(
-            self,
-            model_path: str | Path,
-            model_type: str = 'resnet',
-            input_size: int = 224,
-            device: str | torch.device | None = None,
-            normalized_targets: bool | None = None
-                 ):
-        
+        self,
+        model_path: str | Path,
+        model_type: str = "resnet",
+        input_size: int = 224,
+        device: str | torch.device | None = None,
+        normalized_targets: bool | None = None,
+    ):
         """
         Initializes the detector, loads weights, and prepares the model for inference.
 
@@ -40,12 +38,12 @@ class FacePointsDetector():
             model_type (str): Model architecture type. Must suit passed models state dictionary.
             input_size (int): Target resolution to which input images will be resized
                 Do not change unless you have trained your custom model with another resolution.
-            device (str | torch.device | None): Device to run inference on. 
+            device (str | torch.device | None): Device to run inference on.
                 If None, automatically selects the best available device.
             normalized_targets (bool | None): Whether model predicts normalized coordinates that need rescaling.
                                              If None, tries to automaticaly choose mode.
         """
-        
+
         self.input_size = int(input_size)
 
         if device is not None:
@@ -57,16 +55,18 @@ class FacePointsDetector():
         else:
             self.device = get_device()
 
-        if self.device.type == 'cuda':
+        if self.device.type == "cuda":
             torch.backends.cudnn.benchmark = True
 
-        if model_type == 'base':
+        if model_type == "base":
             self.model = FacePointsModel(input_size=input_size)
-        elif model_type == 'resnet':
+        elif model_type == "resnet":
             self.model = FacePointsResNet(input_size=input_size)
         else:
-            raise ValueError(f'Unknown model type: {model_type}. Use "base" or "resnet".')
-        
+            raise ValueError(
+                f'Unknown model type: {model_type}. Use "base" or "resnet".'
+            )
+
         load_from_state_dict(self.model, Path(model_path))
         self.model.to(self.device)
         self.model.eval()
@@ -78,21 +78,23 @@ class FacePointsDetector():
 
         self.model = self.model.to(memory_format=torch.channels_last)
 
-        dummy = torch.zeros(1, 3, self.input_size, self.input_size).to(device=self.device)
+        dummy = torch.zeros(1, 3, self.input_size, self.input_size).to(
+            device=self.device
+        )
 
         with torch.inference_mode():
             dummy_pred = self.model(dummy)
 
         if normalized_targets is None:
-            self.normalized_targets = True \
-                                     if (dummy_pred.max() < 1.5) and (dummy_pred.min() > -0.5) else \
-                                     False
+            self.normalized_targets = (
+                True
+                if (dummy_pred.max() < 1.5) and (dummy_pred.min() > -0.5)
+                else False
+            )
         else:
             self.normalized_targets = normalized_targets
 
-    
     def preprocess(self, image: np.ndarray | Image.Image):
-
         """
         Resizes and normalizes the image to the model's input format.
 
@@ -111,15 +113,13 @@ class FacePointsDetector():
         image = image.astype(np.float32) / 255.0
 
         return image, original_shape
-    
 
     def postprocess(
-            self, 
-            pred_tensor: torch.Tensor, 
-            original_shape: np.ndarray | list[int] | tuple[int, int],
-            normalized_targets: bool
-            ):
-
+        self,
+        pred_tensor: torch.Tensor,
+        original_shape: np.ndarray | list[int] | tuple[int, int],
+        normalized_targets: bool,
+    ):
         """
         Resizes predicted coordinates back to original image size.
 
@@ -140,27 +140,24 @@ class FacePointsDetector():
         pred = pred_tensor.tolist()
 
         return pred
-    
 
     def _make_batch(
-            self, 
-            images: list[np.ndarray | Image.Image], 
-            names: list[str], 
-            batch_num: int, 
-            batch_size: int, 
-            pin_memory: bool
-            ):
-        
+        self,
+        images: list[np.ndarray | Image.Image],
+        names: list[str],
+        batch_num: int,
+        batch_size: int,
+        pin_memory: bool,
+    ):
         """Slices, preprocesses, and converts a chunk of images into a PyTorch batch."""
 
         batch = []
         original_shapes = []
 
-        images_slice = images[batch_num * batch_size: (batch_num + 1) * batch_size]
-        image_names_slice = names[batch_num * batch_size: (batch_num + 1) * batch_size]
+        images_slice = images[batch_num * batch_size : (batch_num + 1) * batch_size]
+        image_names_slice = names[batch_num * batch_size : (batch_num + 1) * batch_size]
 
         for image in images_slice:
-
             image, original_shape = self.preprocess(image)
             original_shapes.append(original_shape)
             batch.append(image)
@@ -175,77 +172,83 @@ class FacePointsDetector():
 
         return batch, original_shapes, image_names_slice
 
-
     def detect(
-            self,
-            images: list[np.ndarray | Image.Image],
-            image_names: list[str],
-            batch_size: int = 16,
-            use_amp: bool = False,
-            pin_memory: bool = False
-            ):
-
+        self,
+        images: list[np.ndarray | Image.Image],
+        image_names: list[str],
+        batch_size: int = 16,
+        use_amp: bool = False,
+        pin_memory: bool = False,
+    ):
         """
         Performs facial landmark detection and returns scaled coordinates.
 
         Args:
             images (list[np.ndarray | Image.Image]): Input images for inference.
             image_names (list[str]): Names of the images to use as keys in the output dictionary.
-            batch_size (int): Number of images processed per batch. 
+            batch_size (int): Number of images processed per batch.
                 Lower values (4, 8) are recommended for devices with limited memory.
-            use_amp (bool): Whether to use FP16 mixed precision. 
+            use_amp (bool): Whether to use FP16 mixed precision.
                 Can significantly speed up inference on modern GPUs.
-            pin_memory (bool): Whether to use pinned memory for batches. 
+            pin_memory (bool): Whether to use pinned memory for batches.
                 Speeds up CPU-to-GPU data transfer but increases RAM usage.
 
         Returns:
-            dict[str, list[float]]: A dictionary where each key is an image name 
+            dict[str, list[float]]: A dictionary where each key is an image name
                 and the value is a list of predicted [x1, y1, x2, y2, ...] coordinates.
         """
-        
 
         if len(images) != len(image_names):
-            raise ValueError('Number of names must match number of images')
-        
+            raise ValueError("Number of names must match number of images")
+
         result_dict = {}
 
         n_batches = (len(images) - 1) // batch_size + 1
 
-        device_type = 'cuda' if self.device.type == 'cuda' else \
-                      'mps' if self.device.type == 'mps' else \
-                      'cpu'
-        pin_memory = pin_memory and (device_type == 'cuda')
+        device_type = (
+            "cuda"
+            if self.device.type == "cuda"
+            else "mps"
+            if self.device.type == "mps"
+            else "cpu"
+        )
+        pin_memory = pin_memory and (device_type == "cuda")
 
-        for batch_num in tqdm(range(n_batches), desc=f'Inference'):
-
+        for batch_num in tqdm(range(n_batches), desc="Inference"):
             batch, original_shapes, image_names_slice = self._make_batch(
-                images=images, 
+                images=images,
                 names=image_names,
-                batch_num=batch_num, 
+                batch_num=batch_num,
                 batch_size=batch_size,
-                pin_memory=pin_memory)
+                pin_memory=pin_memory,
+            )
 
-            with torch.inference_mode(), torch.amp.autocast(device_type=device_type, enabled=use_amp):
-
+            with (
+                torch.inference_mode(),
+                torch.amp.autocast(device_type=device_type, enabled=use_amp),
+            ):
                 batch = batch.to(device=self.device, non_blocking=pin_memory)
 
                 preds = self.model(batch)
                 preds = preds.cpu()
 
-                for pred_tensor, name, original_shape in zip(preds, image_names_slice, original_shapes):
-
+                for pred_tensor, name, original_shape in zip(
+                    preds, image_names_slice, original_shapes
+                ):
                     pred = pred_tensor.clone()
 
-                    pred = self.postprocess(pred, original_shape, self.normalized_targets)
-                    
+                    pred = self.postprocess(
+                        pred, original_shape, self.normalized_targets
+                    )
+
                     if name not in result_dict:
                         result_dict[name] = pred
                     else:
                         k = 1
 
-                        while f'{name}_{k}' in result_dict:
+                        while f"{name}_{k}" in result_dict:
                             k += 1
 
-                        result_dict[f'{name}_{k}'] = pred
+                        result_dict[f"{name}_{k}"] = pred
 
         return result_dict

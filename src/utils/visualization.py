@@ -1,11 +1,12 @@
-import numpy as np
-from PIL import Image
 from pathlib import Path
+
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.figure import Figure
+from PIL import Image
 
-def save_fig(fig: Figure, save_dir: str | Path, name: str = 'figure'):
 
+def save_fig(fig: Figure, save_dir: str | Path, name: str = "figure"):
     """
     Saves a matplotlib figure to the specified directory.
 
@@ -21,27 +22,25 @@ def save_fig(fig: Figure, save_dir: str | Path, name: str = 'figure'):
     save_dir = Path(save_dir).resolve()
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    path = save_dir / f'{name}.png'
+    path = save_dir / f"{name}.png"
 
     k = 1
     while path.exists():
-        path = save_dir / f'{name}_{k}.png'
+        path = save_dir / f"{name}_{k}.png"
         k += 1
 
     fig.savefig(path)
 
 
-
 def visualize(
-        image: np.ndarray | Image.Image, 
-        coords: list | np.ndarray,
-        result: np.ndarray | Image.Image = None,
-        name: str = None,
-        show: bool = False,
-        save: bool = True,
-        save_dir: str | Path = './pic/'
-        ):
-    
+    image: np.ndarray | Image.Image,
+    coords: list | np.ndarray,
+    result: np.ndarray | Image.Image = None,
+    name: str = None,
+    show: bool = False,
+    save: bool = True,
+    save_dir: str | Path = "./pic/",
+):
     """
     Visualizes predicted keypoints by overlaying them on the input image.
 
@@ -57,7 +56,7 @@ def visualize(
     Returns:
         Figure: The created matplotlib figure.
     """
-    
+
     has_result = result is not None
 
     coords = np.asarray(coords)
@@ -68,19 +67,19 @@ def visualize(
     n_cols = 3 if has_result else 2
 
     fig, axs = plt.subplots(1, n_cols, figsize=(10, 6))
-    axs[0].imshow(image, label='original')
-    axs[0].set_title('Original Image')
-    axs[0].axis('off')
-    axs[1].imshow(image, label='predicted keypoints')
-    axs[1].scatter(x_s, y_s, c='C0', s=10)
-    axs[1].set_title('Predicted keypoints')
-    axs[1].axis('off')
+    axs[0].imshow(image, label="original")
+    axs[0].set_title("Original Image")
+    axs[0].axis("off")
+    axs[1].imshow(image, label="predicted keypoints")
+    axs[1].scatter(x_s, y_s, c="C0", s=10)
+    axs[1].set_title("Predicted keypoints")
+    axs[1].axis("off")
     if has_result:
-        axs[2].imshow(result, label='overlay')
-        axs[2].set_title('Image with overlay')
-        axs[2].axis('off')
+        axs[2].imshow(result, label="overlay")
+        axs[2].set_title("Image with overlay")
+        axs[2].axis("off")
 
-    plt.suptitle('Pipeline demonstration')
+    plt.suptitle("Pipeline demonstration")
 
     if save:
         save_fig(fig, save_dir, name)
@@ -91,14 +90,15 @@ def visualize(
     return fig
 
 
-def get_visualization_callback(vis: str, save_vis: bool = None, save_dir: str | Path = './output/'):
-
+def get_visualization_callback(
+    vis: str, save_vis: bool = None, save_dir: str | Path = "./output/"
+):
     """
     Returns visualisation callback for inference pipeline based on given params:
 
     Args:
-        vis (str): Whether to show visualisation on screen. Supports "all" to show visualization 
-                   for every processed image, "first" to show for first image only. 
+        vis (str): Whether to show visualisation on screen. Supports "all" to show visualization
+                   for every processed image, "first" to show for first image only.
                    Default to None(do not show).
         save_vis (bool): Wether to save visualization in saving directory.
         save_dir (str | Path): Where to save results. Default to "./output".
@@ -110,12 +110,14 @@ def get_visualization_callback(vis: str, save_vis: bool = None, save_dir: str | 
         ValueError: If vis not in [None, 'first', 'all'].
     """
 
-    if vis not in {None, 'first', 'all'}:
+    if vis not in {None, "first", "all"}:
         raise ValueError('vis must be one of: None, "first", "all"')
 
     if save_dir is None:
         if save_vis:
-            raise ValueError('Specify saving directory or use default location, not None.')
+            raise ValueError(
+                "Specify saving directory or use default location, not None."
+            )
     else:
         save_dir = Path(save_dir).resolve()
 
@@ -126,16 +128,14 @@ def get_visualization_callback(vis: str, save_vis: bool = None, save_dir: str | 
         names_chunk,
         results_chunk,
     ):
-        
+
         nonlocal is_first
 
         for i, name in enumerate(names_chunk):
-
             image = images_chunk[i]
             coords = results_chunk[name]
 
-            vis_fig = (is_first and vis == 'first') \
-                    or (vis == 'all')
+            vis_fig = (is_first and vis == "first") or (vis == "all")
 
             visualize(
                 image=image,
@@ -143,10 +143,10 @@ def get_visualization_callback(vis: str, save_vis: bool = None, save_dir: str | 
                 name=name,
                 show=vis_fig,
                 save=save_vis,
-                save_dir=(save_dir / 'img') if save_vis else None
-                )
-            
-            if vis_fig and vis == 'first':
+                save_dir=(save_dir / "img") if save_vis else None,
+            )
+
+            if vis_fig and vis == "first":
                 is_first = False
-            
+
     return visualize_chunk if (vis is not None) or save_vis else None

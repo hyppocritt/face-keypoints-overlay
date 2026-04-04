@@ -1,17 +1,19 @@
 import random
-import numpy as np 
-import torch
 from typing import Generator, Sequence
 
+import numpy as np
+import torch
+
+
 def get_device():
-    
+
     if torch.cuda.is_available():
-        return torch.device('cuda')
+        return torch.device("cuda")
     elif torch.mps.is_available():
-        return torch.device('mps')
-    else: 
-        return torch.device('cpu')
-    
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
 
 def set_seed(seed: int = 78):
 
@@ -19,10 +21,9 @@ def set_seed(seed: int = 78):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    
+
 
 def chunk_list(lst: Sequence, size: int = 256) -> Generator[Sequence, None, None]:
-
     """
     Splits an iterable into consecutive chunks of the given size.
 
@@ -35,5 +36,4 @@ def chunk_list(lst: Sequence, size: int = 256) -> Generator[Sequence, None, None
     """
 
     for i in range(0, len(lst), size):
-        yield lst[i: i + size]
-
+        yield lst[i : i + size]
