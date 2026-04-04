@@ -3,12 +3,12 @@ import torch
 
 def mse_torch(y_gt, y_pred):
 
-    return torch.mean((y_gt - y_pred)**2)
+    return torch.mean((y_gt - y_pred) ** 2)
 
 
 def rmse_torch(y_gt, y_pred):
-                                                                            
-    return torch.sqrt(torch.mean((y_gt - y_pred)**2))
+
+    return torch.sqrt(torch.mean((y_gt - y_pred) ** 2))
 
 
 def mae_torch(y_gt, y_pred):
@@ -24,7 +24,6 @@ def nme_torch(y_gt, y_pred, l=4, r=9):
 
     y_gt = y_gt.reshape(y_gt.shape[0], -1, 2)
     y_pred = y_pred.reshape(y_pred.shape[0], -1, 2)
-    
 
     left = y_gt[:, l]
     right = y_gt[:, r]

@@ -1,5 +1,6 @@
-from PIL import Image
 from pathlib import Path
+
+from PIL import Image
 
 from src.detector import FacePointsDetector
 from src.inference import run_inference
@@ -7,26 +8,23 @@ from src.overlay import apply_overlay
 from src.utils.settings import Settings
 
 
-class OverlayService():
+class OverlayService:
     def __init__(
-            self,
-            model_path: str | Path,
-            model_type: str,
-            batch_size: int,
-            chunk_size: int,
-            save_keypoints: bool,
-            save_overlays: bool,
-            ):
-        
+        self,
+        model_path: str | Path,
+        model_type: str,
+        batch_size: int,
+        chunk_size: int,
+        save_keypoints: bool,
+        save_overlays: bool,
+    ):
+
         self.detector = FacePointsDetector(
-            model_path=model_path,
-            model_type=model_type,
-            batch_size=batch_size
+            model_path=model_path, model_type=model_type, batch_size=batch_size
         )
         self.save_keypoints = save_keypoints
         self.save_overlays = save_overlays
         self.chunk_size = chunk_size
-
 
     def process_image(self, image: Image.Image, mask_name: str):
         keypoints_dict = run_inference(
@@ -34,7 +32,7 @@ class OverlayService():
             image_names=["input"],
             detector=self.detector,
             save=self.save_keypoints,
-            chunk_size=self.chunk_size
+            chunk_size=self.chunk_size,
         )
 
         keypoints = keypoints_dict["input"]
@@ -47,7 +45,7 @@ class OverlayService():
         )
 
         return result[0]
-    
+
 
 def create_overlay_service(settings: Settings) -> OverlayService:
 
@@ -57,5 +55,5 @@ def create_overlay_service(settings: Settings) -> OverlayService:
         batch_size=settings.detect.batch_size,
         chunk_size=settings.inference.chunk_size,
         save_keypoints=settings.inference.save,
-        save_overlays=settings.overlay.save
+        save_overlays=settings.overlay.save,
     )

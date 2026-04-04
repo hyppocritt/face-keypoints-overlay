@@ -1,14 +1,14 @@
+import copy
 import os
 from pathlib import Path
-from dotenv import load_dotenv
-import copy
 
+from dotenv import load_dotenv
+
+from src.paths import CONFIG_DIR, DATA_DIR, WEIGHTS_DIR
 from src.utils.io import load_yaml
-from src.paths import WEIGHTS_DIR, CONFIG_DIR, DATA_DIR
 
 
 class Settings(dict):
-
     """
     Simple settings class to store all parameters.
     """
@@ -33,10 +33,9 @@ class Settings(dict):
             self[key] = value
 
         return value
-    
+
     @staticmethod
     def _deep_update(base: dict, new: dict) -> dict:
-
         """
         Recursively updates a dictionary with values from another dictionary.
 
@@ -52,42 +51,38 @@ class Settings(dict):
         """
 
         for k, v in new.items():
-
             if v is None:
                 continue
 
             if (k in base) and isinstance(base[k], dict) and isinstance(v, dict):
-
                 base[k] = Settings._deep_update(base[k], v)
 
             else:
                 base[k] = v
 
         return base
-    
+
     @staticmethod
     def _parse_value(value: str):
 
-        if value.lower() == 'none':
+        if value.lower() == "none":
             return None
-        
-        if value.lower() in {'true', 'false'}:
-            return value.lower() == 'true'
-        
+
+        if value.lower() in {"true", "false"}:
+            return value.lower() == "true"
+
         if value.isdigit():
             return int(value)
-        
+
         try:
             return float(value)
         except Exception:
             pass
 
         return value
-    
-    
+
     @staticmethod
     def _parse_overrides(overrides: list[str]) -> dict:
-
         """
         Turns a list of flat string overrides into a nested dictionary.
 
@@ -100,27 +95,24 @@ class Settings(dict):
 
         if not overrides:
             return {}
-        
+
         result = {}
 
         for string in overrides:
-
-            full_key, value = list(map( lambda x: x.strip(), string.split('=', 1) ))
-            keys = full_key.split('.')
+            full_key, value = list(map(lambda x: x.strip(), string.split("=", 1)))
+            keys = full_key.split(".")
 
             current = result
 
             for key in keys[:-1]:
-                    current = current.setdefault(key, {})
+                current = current.setdefault(key, {})
 
             current[keys[-1]] = Settings._parse_value(value)
-        
+
         return result
 
-    
     @classmethod
     def from_sources(cls, config_path: str | Path = None, overrides: list[str] = None):
-
         """
         Builds Settings object from overrides, YAML config and ENV variables.
 
@@ -129,7 +121,7 @@ class Settings(dict):
 
         Args:
             config_path (str | Path): Path to YAML config file. If None, uses ./configs/default.yaml
-            overrides (list[str]): List of overrides in format "key=value" where key may be "key_1.key_2". 
+            overrides (list[str]): List of overrides in format "key=value" where key may be "key_1.key_2".
                                    These values can override config settings.
 
         Returns:
@@ -142,26 +134,27 @@ class Settings(dict):
         load_dotenv()
 
         env_dict = {
-            'data': {
-                'path': Path(os.getenv('DATA_DIR', DATA_DIR)).resolve(),
-                'metadata_path': Path(os.getenv('METADATA_PATH', None)).resolve() \
-                                 if os.getenv('METADATA_PATH', None) is not None \
-                                 else None
+            "data": {
+                "path": Path(os.getenv("DATA_DIR", DATA_DIR)).resolve(),
+                "metadata_path": Path(os.getenv("METADATA_PATH", None)).resolve()
+                if os.getenv("METADATA_PATH", None) is not None
+                else None,
             },
-            'weights_dir': Path(os.getenv('WEIGHTS_DIR', WEIGHTS_DIR)).resolve(),
-            'config_dir': Path(os.getenv('CONFIG_DIR', CONFIG_DIR)).resolve()
-
-        }   
+            "weights_dir": Path(os.getenv("WEIGHTS_DIR", WEIGHTS_DIR)).resolve(),
+            "config_dir": Path(os.getenv("CONFIG_DIR", CONFIG_DIR)).resolve(),
+        }
 
         settings_dict = copy.deepcopy(env_dict)
 
         if config_path is None:
-            config_path = settings_dict['config_dir'] / 'default.yaml'
+            config_path = settings_dict["config_dir"] / "default.yaml"
 
         config_path = Path(config_path).resolve()
 
         if not config_path.exists():
-            raise FileNotFoundError(f'Config file not found at {config_path}. Please specify a valid config path.')
+            raise FileNotFoundError(
+                f"Config file not found at {config_path}. Please specify a valid config path."
+            )
 
         config_dict = load_yaml(config_path)
 
@@ -174,45 +167,44 @@ class Settings(dict):
         settings = cls(settings_dict)
 
         debug_dict = {
-            'config_path': config_path,
-            'config_name': config_path.name,
-            'config_args': config_dict,
-            'cli_args': overrides_dict,
-            'env_args': env_dict
+            "config_path": config_path,
+            "config_name": config_path.name,
+            "config_args": config_dict,
+            "cli_args": overrides_dict,
+            "env_args": env_dict,
         }
 
         settings.debug = debug_dict
 
         return settings
-    
-    
+
     def to_dict(self):
 
         res = {}
         for k, v in self.items():
-            
             if isinstance(v, Settings):
                 res[k] = v.to_dict()
 
-            else: res[k] = v
+            else:
+                res[k] = v
 
         return res
-    
 
     def resolve_model_path(self):
 
-        model_args = getattr(self, 'model', None)
+        model_args = getattr(self, "model", None)
 
         if model_args is not None:
-
-            model_path = getattr(model_args, 'path', None)
+            model_path = getattr(model_args, "path", None)
 
             if model_path is not None:
                 return Path(model_path).resolve()
-        
-            if getattr(self, 'weights_dir', None) and \
-            getattr(model_args, 'filename', None):
-            
+
+            if getattr(self, "weights_dir", None) and getattr(
+                model_args, "filename", None
+            ):
                 return Path(self.weights_dir).resolve() / self.model.filename
-        
-        raise ValueError('model_path or (weights_dir + model.filename) must be provided.')
+
+        raise ValueError(
+            "model_path or (weights_dir + model.filename) must be provided."
+        )

@@ -1,13 +1,8 @@
-from torch import nn 
+from torch import nn
+
 
 class ResBlock(nn.Module):
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 1
-        ):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1):
 
         super().__init__()
 
@@ -18,7 +13,7 @@ class ResBlock(nn.Module):
                 kernel_size=3,
                 stride=stride,
                 padding=1,
-                bias=False
+                bias=False,
             ),
             nn.BatchNorm2d(num_features=out_channels),
             nn.GELU(),
@@ -28,29 +23,27 @@ class ResBlock(nn.Module):
                 kernel_size=3,
                 stride=1,
                 padding=1,
-                bias=False
+                bias=False,
             ),
             nn.BatchNorm2d(num_features=out_channels),
         )
 
         if stride > 1 or out_channels > in_channels:
-
             self.skip = nn.Sequential(
                 nn.Conv2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
                     kernel_size=1,
                     stride=stride,
-                    padding=0
-                    ),
-                nn.BatchNorm2d(num_features=out_channels)
+                    padding=0,
+                ),
+                nn.BatchNorm2d(num_features=out_channels),
             )
 
         else:
             self.skip = nn.Identity()
 
         self.gelu = nn.GELU()
-
 
     def forward(self, x):
 
@@ -60,9 +53,7 @@ class ResBlock(nn.Module):
         return x
 
 
-
 class FacePointsResNet(nn.Module):
-
     def __init__(self, input_size=224):
 
         super().__init__()
@@ -76,17 +67,17 @@ class FacePointsResNet(nn.Module):
             ResBlock(32, 32),
             ResBlock(32, 64, 2),
             ResBlock(64, 128, 2),
-            ResBlock(128, 256, 2)
+            ResBlock(128, 256, 2),
         )
-        
+
         self.head = nn.Sequential(
             nn.Conv2d(256, 128, 3, padding=1),
             nn.GELU(),
             nn.Conv2d(128, 28, 1),
             nn.AdaptiveAvgPool2d(1),
-            nn.Flatten()
+            nn.Flatten(),
         )
-    
+
     def forward(self, x):
 
         x = self.features(x)
