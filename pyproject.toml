@@ -1,0 +1,49 @@
+[project]
+name = "face-keypoints-overlay"
+version = "0.1.0"
+description = "Deep learning facial overlay project"
+authors = [
+    {name = "hyppocritt",email = "sssund0me@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11,<3.15,!=3.14.1"
+dependencies = [
+    "numpy (>=2.4.4,<3.0.0)",
+    "pandas (>=3.0.2,<4.0.0)",
+    "albumentations (>=2.0.8,<3.0.0)",
+    "opencv-python (>=4.13.0.92,<5.0.0.0)",
+    "scikit-learn (>=1.8.0,<2.0.0)",
+    "tqdm (>=4.67.3,<5.0.0)",
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "python-dotenv (>=1.2.2,<2.0.0)",
+    "fastapi (>=0.135.3,<0.136.0)",
+    "uvicorn (>=0.42.0,<0.43.0)",
+    "matplotlib (>=3.10.8,<4.0.0)",
+    "python-multipart (>=0.0.22,<0.0.23)"
+]
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.15.8,<0.16.0)",
+    "pytest (>=9.0.2,<10.0.0)"
+]
+ml = [
+    "torch ==2.1.0",
+    "torchvision ==0.16.0"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [{include = "src"}]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
