@@ -177,8 +177,18 @@ def run_inference(
         if not images:
             raise RuntimeError(f'No images found in image list.')
         
+        if isinstance(images, (np.ndarray, Image.Image)):
+            images = [images]
+        else:
+            images = list(images)
+
         if image_names is None:
-            image_names = [f'img_{i}' for i in range(len(images))]
+            image_names = [f"img_{i}" for i in range(len(images))]
+
+        if isinstance(image_names, str):
+            image_names = [image_names]
+        else: 
+            image_names = list(image_names)
 
         if len(image_names) != len(images):
             raise ValueError(f'Got {len(images)} images, but only {len(image_names)} names. \

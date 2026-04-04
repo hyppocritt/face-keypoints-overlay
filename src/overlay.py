@@ -69,6 +69,8 @@ def apply_overlay(
     
     mask = get_mask(mask)
 
+    results = []
+
     for i, (image, name) in enumerate(
         tqdm(
             zip(images, image_names),
@@ -82,13 +84,9 @@ def apply_overlay(
             keypoints=keypoints[name]
             )
 
-        print(
-            result.shape,
-            result.dtype,
-            result.min(),
-            result.max()
-        )
         result = Image.fromarray(result)
+
+        results.append(result)
 
         if save:
             save_path = save_dir / f'{name}_edited.jpg'
@@ -115,6 +113,8 @@ def apply_overlay(
                 save=save_vis,
                 save_dir=(save_dir / 'img') if save_vis else None
             )
+
+    return results
 
 
 def get_overlay_callback(
